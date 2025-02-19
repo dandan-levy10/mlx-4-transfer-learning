@@ -3,6 +3,9 @@ channels:
   - defaults
   - https://repo.anaconda.com/pkgs/main
   - https://repo.anaconda.com/pkgs/r
+  - conda-forge
+  - pytorch
+  - fastai
 dependencies:
   - defaults/osx-arm64::blas==1.0=openblas
   - defaults/osx-arm64::bzip2==1.0.8=h80987f9_6
@@ -129,7 +132,7 @@ dependencies:
   - defaults/osx-arm64::websocket-client==1.8.0=py310hca03da5_0
   - defaults/osx-arm64::wheel==0.45.1=py310hca03da5_0
   - defaults/osx-arm64::widgetsnbextension==4.0.13=py310hca03da5_0
-  - defaults/osx-arm64::anyio==4.6.2=py310hca03da5_0
+  # - defaults/osx-arm64::anyio==4.6.2=py310hca03da5_0
   - defaults/noarch::asttokens==2.0.5=pyhd3eb1b0_0
   - defaults/osx-arm64::async-lru==2.0.4=py310hca03da5_0
   - defaults/osx-arm64::beautifulsoup4==4.12.3=py310hca03da5_0
