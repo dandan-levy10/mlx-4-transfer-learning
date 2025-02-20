@@ -109,17 +109,22 @@ def train_loop(dataloader, clip_model, decoder, vocab_projection, optimizer, sch
                 # If a tokenizer is provided, print a sample prediction
                 if tokenizer is not None:
                     print_sample_prediction(sample_logits_3d, targets_2d, tokenizer)
+            
+            break
 
         # Move the scheduler step outside the batch loop:
         scheduler.step()
         epoch_accuracy = total_correct / total_count if total_count > 0 else 0.0
         tqdm.write(f"Epoch {epoch+1} completed, Epoch loss: {epoch_loss/len(dataloader):.4f}, Epoch Accuracy: {epoch_accuracy*100:.2f}%")
+        if tokenizer is not None:
+                    print_sample_prediction(sample_logits_3d, targets_2d, tokenizer)
+
     
 
     
-def run_training(num_epochs=1, batch_size=32, lr=0.001,
+def run_training(num_epochs=30, batch_size=1, lr=0.001,
                  num_layers=2, embedding_dim=128, num_heads=4, ff_dim=256,
-                 step_size=5, gamma=0.5):
+                 step_size=50, gamma=0.5):
     """
     This function initializes all components (dataset, model, optimizer, etc.)
     and then runs the training loop.
@@ -137,7 +142,7 @@ def run_training(num_epochs=1, batch_size=32, lr=0.001,
     """
     # 1. Initialize the dataset and dataloader.
     dataset = FlickrDataset()
-    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+    dataloader = DataLoader(dataset, batch_size=1, shuffle=False)
 
     # 2. Load the CLIP model.
     clip_model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32").to(DEVICE)
@@ -179,4 +184,4 @@ def run_training(num_epochs=1, batch_size=32, lr=0.001,
     print("Saved checkpoint to model_checkpoint.pth")
 
 if __name__ == "__main__":
-    run_training(num_epochs=1)  # Modify hyperparameters as needed.
+    run_training(num_epochs=200)  # Modify hyperparameters as needed.

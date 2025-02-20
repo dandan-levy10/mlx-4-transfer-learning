@@ -118,7 +118,7 @@ if __name__ == "__main__":
     # Create a dataloader for inference. Here we simply use the first image from your dataset.
     dataset = FlickrDataset()
     from torch.utils.data import DataLoader
-    dataloader = DataLoader(dataset, batch_size=3, shuffle=True)
+    dataloader = DataLoader(dataset, batch_size=1, shuffle=False)
     
     # Load your models and tokenizer. (Adjust these instantiations as in your training script.)
     clip_model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32").to(DEVICE)
