@@ -8,7 +8,7 @@ from utils import DEVICE
 
 
 class Decoder(nn.Module):
-    def __init__(self, embedding_dim: int = 64, num_heads: int = 4, ff_dim: int = 128, num_layers: int = 4, dropout: float = 0.1, max_seq_len: int = 100, apply_mask: bool = True, input_dim: int = 512):
+    def __init__(self, embedding_dim: int = 64, num_heads: int = 4, ff_dim: int = 128, num_layers: int = 4, dropout: float = 0.1, max_seq_len: int = 100, apply_mask: bool = True, input_dim: int = 512, output_dim: int = 512):
         super().__init__()
         self.apply_mask = apply_mask
         self.embedding_dim = embedding_dim
@@ -20,6 +20,7 @@ class Decoder(nn.Module):
         self.projection = nn.Linear(input_dim, embedding_dim)
         self.pos_embedding = nn.Parameter(torch.randn(1, max_seq_len, embedding_dim))
         self.layers = nn.Sequential(*[DecoderLayer(embedding_dim, num_heads, ff_dim, dropout, apply_mask) for _ in range(num_layers)])
+        self.output_projection = nn.Linear(embedding_dim, output_dim)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.projection(x)
@@ -30,6 +31,7 @@ class Decoder(nn.Module):
             x, weights = layer(x)
             if weights is not None:  # Keep the last layer's attention weights
                 attention_weights = weights
+        x = self.output_projection(x)
         return (x, attention_weights) if attention_weights is not None else x
     
 

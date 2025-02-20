@@ -8,38 +8,19 @@ from transformers import CLIPModel
 from dataset import FlickrDataset
 from decoder import Decoder
 from utils import DEVICE
+from helpers import insert_eos_token, print_sample_prediction
 
-def print_sample_prediction(logits_3d, targets_2d, tokenizer):
-    """
-    Given unflattened logits (shape: [batch, seq_len, vocab_size]) and targets (shape: [batch, seq_len]),
-    decode the first sample in the batch and print the predicted vs. target text.
-    """
-    # Get sample predictions for the first sample in the batch.
-    sample_logits = logits_3d[0]  # shape: (seq_len, vocab_size)
-    sample_targets = targets_2d[0]  # shape: (seq_len)
-
-    # Get predicted token ids via argmax
-    pred_ids = sample_logits.argmax(dim=-1).tolist()
-    true_ids = sample_targets.tolist()
-
-    # Decode using the tokenizer (skip special tokens for readability)
-    pred_text = tokenizer.decode(pred_ids, skip_special_tokens=True)
-    true_text = tokenizer.decode(true_ids, skip_special_tokens=True)
-
-    # Remove pad tokens from the target (and corresponding predictions)
-    pad_id = tokenizer.pad_token_id
-    filtered_pred_ids = [x for x, y in zip(pred_ids, true_ids) if y != pad_id]
-    filtered_true_ids = [y for y in true_ids if y != pad_id]
-    if len(filtered_true_ids) > 0:
-        correct_predictions = sum(x == y for x, y in zip(filtered_pred_ids, filtered_true_ids))
-        sample_accuracy = correct_predictions / len(filtered_true_ids) * 100
-    else:
-        sample_accuracy = 0.0
-    print(f"Sample Accuracy  : {sample_accuracy:.2f}%")
-    print()
-
-    print("Sample Prediction:", pred_text)
-    print("Sample Target    :", true_text)
+def get_embeddings(clip_model, images, captions, tokenizer):
+    clip_model.eval()
+    with torch.no_grad():
+        image_features = clip_model.get_image_features(pixel_values=images)
+        text_features = clip_model.text_model(
+            input_ids=captions,
+            output_hidden_states=True
+        )
+        text_features = text_features.last_hidden_state  # (batch, seq_len, hidden_dim)
+        combined_features = torch.cat((image_features.unsqueeze(1), text_features), dim=1)
+        return combined_features
 
 def train_loop(dataloader, clip_model, decoder, vocab_projection, optimizer, scheduler, num_epochs, tokenizer=None):
     for epoch in range(num_epochs):
@@ -50,26 +31,17 @@ def train_loop(dataloader, clip_model, decoder, vocab_projection, optimizer, sch
         for batch_idx, (images, captions) in enumerate(progress_bar):
             images = images.to(DEVICE)
             captions = captions.to(DEVICE)
+            # Insert EOS token in each caption at proper location.
+            captions = insert_eos_token(captions, tokenizer)
 
             # Use the CLIP model to extract image and text features.
-            clip_model.eval()
-            with torch.no_grad():
-                image_features = clip_model.get_image_features(pixel_values=images)
-                text_features = clip_model.text_model(
-                    input_ids=captions,
-                    output_hidden_states=True
-                )
-                last_hidden_state = text_features.last_hidden_state  # (batch, seq_len, hidden_dim)
+            combined_features = get_embeddings(clip_model, images, captions, tokenizer)
 
             optimizer.zero_grad()
 
             # Prepare decoder input by concatenating image features (as a CLS token)
             # with text features.
-            decoder_input = torch.cat((image_features.unsqueeze(1), last_hidden_state), dim=1)
-            logits = decoder(decoder_input)
-
-            # Project the decoder's output to the vocabulary size.
-            logits = vocab_projection(logits)
+            logits = decoder(combined_features)
 
             # Remove the image/CLS token output to match caption targets.
             # Here we assume that the decoder inputs are [CLS, token1, token2, ...] so that we predict the caption tokens.
@@ -117,8 +89,8 @@ def train_loop(dataloader, clip_model, decoder, vocab_projection, optimizer, sch
     
 
     
-def run_training(num_epochs=1, batch_size=32, lr=0.001,
-                 num_layers=2, embedding_dim=128, num_heads=4, ff_dim=256,
+def run_training(num_epochs=1, batch_size=64, lr=0.001,
+                 num_layers=2, embedding_dim=128, num_heads=8, ff_dim=256,
                  step_size=5, gamma=0.5):
     """
     This function initializes all components (dataset, model, optimizer, etc.)
@@ -149,7 +121,7 @@ def run_training(num_epochs=1, batch_size=32, lr=0.001,
 
     # 3. Initialize the decoder.
     decoder = Decoder(num_layers=num_layers, embedding_dim=embedding_dim,
-                      num_heads=num_heads, ff_dim=ff_dim).to(DEVICE)
+                      num_heads=num_heads, ff_dim=ff_dim, output_dim=dataset.vocab_size).to(DEVICE)
 
     # 4. Initialize the vocabulary projection layer.
     vocab_projection = nn.Linear(embedding_dim, dataset.vocab_size).to(DEVICE)
