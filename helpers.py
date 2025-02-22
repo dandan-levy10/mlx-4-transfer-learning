@@ -26,11 +26,15 @@ def insert_eos_token(captions: torch.Tensor, tokenizer) -> torch.Tensor:
             captions[i, -1] = eos_id
     return captions
 
-def print_sample_prediction(logits_3d, targets_2d, tokenizer):
+def print_sample_prediction(logits, captions, tokenizer):
     """
     Given unflattened logits (shape: [batch, seq_len, vocab_size]) and targets (shape: [batch, seq_len]),
     decode the first sample in the batch and print the predicted vs. target text.
     """
+
+    logits_3d = logits[:, :-1, :].detach().cpu() # shape: (batch, seq_len, vocab_size)
+    targets_2d = captions.detach().cpu() # shape: (batch, seq_len)
+
     # Get sample predictions for the first sample in the batch.
     sample_logits = logits_3d[0]  # shape: (seq_len, vocab_size)
     sample_targets = targets_2d[0]  # shape: (seq_len)

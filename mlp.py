@@ -14,4 +14,5 @@ class MultiLayerPerceptron(nn.Module):
         self.layer_norm = nn.LayerNorm(d_model)
 
     def forward(self, x):
-        return self.layer_norm(self.linear(x) + x)
+        out = self.linear(x)
+        return out  # No residual/norm here

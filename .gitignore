@@ -3,9 +3,14 @@ data
 # Exclude PyTorch checkpoint files
 checkpoint.pth
 model_checkpoint.pth
+checkpoints/*
 
 # Exclude all files in the data directory
 data/*
+flickr/*
+
+# Exclude all files in the wandb directory
+wandb/*
 
 # Exclude all files in the logs directory
 logs/*

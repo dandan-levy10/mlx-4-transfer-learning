@@ -1,4 +1,3 @@
-```py
 #
 #
 #
@@ -132,4 +131,3 @@ if __name__ == '__main__':
   out = frk(x, z)
   print('out', out.shape)
   pass
-```
