@@ -1,6 +1,8 @@
 import torch
 import transformers
 from datasets import load_dataset
+from collections import Counter
+from tqdm import tqdm
 
 
 # class FlickrDataset(torch.utils.data.Dataset):
@@ -35,15 +37,31 @@ from datasets import load_dataset
 class FlickrDataset(torch.utils.data.Dataset):
     def __init__(self):
         super().__init__()
-        self.data = load_dataset("nlphuji/flickr30k", cache_dir="./data", split="test")
+        self.data = load_dataset("nlphuji/flickr30k", cache_dir="./data", split="test") # TODO: Remove
         self.processor = transformers.CLIPProcessor.from_pretrained('openai/clip-vit-base-patch32')
         self.tokenizer = self.processor.tokenizer
         self.vocab_size = self.tokenizer.vocab_size
+        self.token_counter = Counter()
+        
+        # Pre-count tokens during initialization
+        # self._count_all_tokens()
 
-
+    def _count_all_tokens(self):
+        """Pre-process all captions to count tokens before training"""
+        for item in tqdm(self.data, desc="Counting tokens"):
+            caption = item["caption"][0]
+            encoding = self.processor(
+                text=[caption],
+                truncation=True,
+                max_length=77,
+                padding="max_length",
+                return_tensors="pt"
+            )
+            tokens = encoding["input_ids"].squeeze(0).tolist()
+            self.token_counter.update(tokens)
 
     def __len__(self):
-        return len(self.data)
+        return len(self.data)  # Hard limit to 5 samples TODO: Remove
 
     def __getitem__(self, idx):
         item = self.data[idx]
@@ -57,6 +75,7 @@ class FlickrDataset(torch.utils.data.Dataset):
             truncation=True,
             max_length=77,
             padding="max_length",
+            
         )
 
         # Remove the extra batch dimension so that we always return a fixed shape.
@@ -64,3 +83,9 @@ class FlickrDataset(torch.utils.data.Dataset):
         caption_ids = encoding["input_ids"].squeeze(0)
 
         return image, caption_ids
+
+if __name__ == "__main__":
+    dataset = FlickrDataset()
+    sample = dataset[0]
+    print("Token IDs:", sample[1])
+    print("Decoded:", dataset.tokenizer.decode(sample[1]))

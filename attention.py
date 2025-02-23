@@ -13,13 +13,18 @@ class Attention(nn.Module):
         self.apply_mask = apply_mask
         
         self.W_q = nn.Linear(in_features = embedding_dim, out_features = embedding_dim)
+        nn.init.xavier_uniform_(self.W_q.weight) # Initialize the weights using Xavier uniform initialization
         self.W_k = nn.Linear(in_features = embedding_dim, out_features = embedding_dim)
+        nn.init.xavier_uniform_(self.W_k.weight)
         self.W_v = nn.Linear(in_features = embedding_dim, out_features = embedding_dim)
+        nn.init.xavier_uniform_(self.W_v.weight)
         self.linear = nn.Linear(in_features = embedding_dim, out_features= embedding_dim)
+        nn.init.xavier_uniform_(self.linear.weight)
         self.layer_norm = nn.LayerNorm(embedding_dim)
         self.dropout = nn.Dropout(dropout)
-        
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        self.image_bias = nn.Parameter(torch.tensor(1.0)) # Adding a bias for the image token
+    
+    def forward(self, x: torch.Tensor) -> tuple:
         batch_size = x.shape[0]
         sequence_length = x.shape[1]
         Q = self.W_q(x)
@@ -36,9 +41,7 @@ class Attention(nn.Module):
         V = torch.permute(V, (0, 2, 1, 3))
 
         A = (Q @ K.transpose(-2, -1)) / math.sqrt(self.head_dim)
-
-        # Store raw attention weights
-        self.attention_weights = A.detach().cpu()
+        A[:, :, :, 0] += self.image_bias  # Boost attention to image token
 
         # Apply mask if apply_mask is True
         if self.apply_mask:
@@ -49,6 +52,9 @@ class Attention(nn.Module):
 
         # Apply softmax along rows, the keys dim
         A = torch.softmax(A, dim= -1) # (batch_size, num_heads, sequence_length, sequence_length)
+
+        # Store raw attention weights
+        self.attention_weights = A.detach().cpu()
 
         # Multiply attention weights @ V, concatenate along the 
         AV = (A @ V) # (batch_size, num_heads, sequence_length, head_dim)
@@ -65,11 +71,5 @@ class Attention(nn.Module):
         # Dropout
         output = self.dropout(output)
 
-        # Residual connection
-        output = output + x
-
-        # Layer normalization
-        output = self.layer_norm(output)
-
-        return output
+        return output, A.detach()  # Return both output and attention weights
     

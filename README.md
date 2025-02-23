@@ -1,5 +1,19 @@
 # Transfer Learning
 
+This project is a simple implementation of a transformer model for image captioning.
+
+## Setup
+
+```bash
+conda activate mlx-4
+```
+
+on a new machine, you can import the environment from the `environment.yml` file.
+
+```bash
+conda env create -f environment.yml
+```
+
 ## Connecting to Computa
 
 ```bash
