@@ -98,13 +98,13 @@ def train_loop(dataloader, transformer, optimizer, scheduler, num_epochs, loss_f
             captions = captions.to(DEVICE)
 
             optimizer.zero_grad()
-            logits, _ = transformer(images, captions)
+            logits, all_attention_weights = transformer(images, captions)
             loss = calculate_loss(logits, captions, tokenizer, loss_fn)
             loss.backward()
             # Add gradient clipping
-            torch.nn.utils.clip_grad_norm_(transformer.parameters(), 1.0)
+            torch.nn.utils.clip_grad_norm_(transformer.parameters(), max_norm=1.0)
             optimizer.step()
-            scheduler.step()
+            
 
             # Batch accuracy calculation (using the new function).
             correct, total = calculate_accuracy_counts(logits, captions, tokenizer)
@@ -113,11 +113,16 @@ def train_loop(dataloader, transformer, optimizer, scheduler, num_epochs, loss_f
 
             epoch_loss += loss.item()
 
-            if batch_idx % 25 == 0:
+            if batch_idx % 100 == 0:
                 batch_acc = correct / total if total > 0 else 0.0
                 tqdm.write(f"Epoch {epoch+1}, Batch {batch_idx}/{len(dataloader)}, Loss: {loss.item():.4f}, Batch Accuracy: {batch_acc*100:.2f}%\n")
                 if tokenizer is not None:
                     print_sample_prediction(logits, captions, tokenizer)
+                  # Get attention to image token in the first layer
+                img_attn = all_attention_weights[0][0, :, 0].mean()  # (batch, heads, seq, seq)
+                print(f"Avg attention to image token (Layer 0): {img_attn:.4f}")
+                print("Real attention shape:", all_attention_weights[0].shape)  # Should be (batch, heads, 78, 78)
+                print("Image projection grad:", transformer.decoder.projection.weight.grad.norm().item())
 
             # Temporary addition
             # print("Image projection grad norm:", 
@@ -130,14 +135,16 @@ def train_loop(dataloader, transformer, optimizer, scheduler, num_epochs, loss_f
             # for name, param in transformer.named_parameters():
             #     if param.grad is not None:
             #         print(f"{name}: {param.grad.norm().item():.4f}")
-
+        
+        scheduler.step()
+        
         # End of epoch: compute epoch-level accuracy.
         epoch_accuracy = epoch_correct / epoch_total if epoch_total > 0 else 0.0
         tqdm.write(f"Epoch {epoch+1} completed, Epoch Loss: {epoch_loss/len(dataloader):.4f}, Epoch Accuracy: {epoch_accuracy*100:.2f}%")
 
-def run_training(num_epochs=1, batch_size=64, lr=0.001,
+def run_training(num_epochs=1, batch_size=5, lr=0.0003,
                  num_layers=1, embedding_dim=512, num_heads=2, ff_dim=1024,
-                 step_size=5, gamma=0.5):
+                 step_size=5, gamma=0.5, dataset_size=1000):
     """
     This function initializes all components (dataset, model, optimizer, etc.)
     and then runs the training loop.
@@ -153,23 +160,29 @@ def run_training(num_epochs=1, batch_size=64, lr=0.001,
         step_size: stepsize for the learning rate scheduler.
         gamma: LR decay rate.
     """
-    # 1. Initialize dataset and model
+    # Load full dataset
     dataset = FlickrDataset()
-    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+    
+    # Create subset (first 5 samples)
+    subset_indices = list(range(dataset_size))
+    subset = torch.utils.data.Subset(dataset, subset_indices)
+    
+    # Create dataloader
+    dataloader = DataLoader(subset, batch_size=batch_size, shuffle=True)
     transformer = Transformer(embedding_dim=embedding_dim, num_heads=num_heads, ff_dim=ff_dim, num_layers=num_layers, dropout=0.1, max_seq_len=78, apply_mask=True, input_dim=512, output_dim=512, device=DEVICE).to(DEVICE)
     
     # 2. Simple loss with label smoothing
     loss_fn = nn.CrossEntropyLoss(
         ignore_index=dataset.tokenizer.pad_token_id,
-        label_smoothing=0.1
+        label_smoothing= 0.0 # NOTE: NOT USED
     )
     
     # 3. Optimizer with gradient clipping
-    optimizer = optim.AdamW(transformer.parameters(), lr=lr)
+    optimizer = optim.AdamW(transformer.parameters(), lr=lr, betas=(0.9, 0.99), eps=1e-6)
 
     # 4. Set up the OneCycleLR scheduler.
     total_steps = len(dataloader) * num_epochs
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=total_steps)
+    scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda step: min(step / 1000, 1.0))  # 1000-step warmup
 
     # Save the state dictionaries after training.
     checkpoint = {
@@ -194,4 +207,4 @@ def run_training(num_epochs=1, batch_size=64, lr=0.001,
     print("Saved checkpoint to model_checkpoint.pth")
 
 if __name__ == "__main__":
-    run_training(num_epochs=3)  # Modify hyperparameters as needed.
+    run_training(num_epochs=150)  # Modify hyperparameters as needed.

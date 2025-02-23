@@ -23,6 +23,7 @@ class Decoder(nn.Module):
         self.pos_embedding = nn.Parameter(torch.randn(1, max_seq_len, embedding_dim))
         self.layers = nn.ModuleList([DecoderLayer(embedding_dim, num_heads, ff_dim, dropout, apply_mask) for _ in range(num_layers)])
         self.output_projection = nn.Linear(embedding_dim, output_dim)
+        self.norm = nn.LayerNorm(embedding_dim)
 
     def forward(self, x: torch.Tensor) -> tuple:
         x = self.projection(x)
@@ -33,6 +34,7 @@ class Decoder(nn.Module):
             all_attention_weights.append(attn_weights)
             
         x = self.output_projection(x)
+        x = self.norm(x)
         return x, all_attention_weights
     
 
@@ -118,6 +120,10 @@ class Transformer(nn.Module):
         self.clip_model = transformers.CLIPModel.from_pretrained("openai/clip-vit-base-patch32").to(DEVICE)
         self.embeddings = self.clip_model.text_model.embeddings
         self.projection = nn.Linear(input_dim, embedding_dim)
+        nn.init.eye_(self.projection.weight) # Initialize projection to identity matrix
+        nn.init.zeros_(self.projection.bias) # Initialize bias to zero
+        self.projection.weight.data *= 0.1  # Small scaling to allow adaptation
+        self.pos_embedding = nn.Parameter(torch.randn(1, max_seq_len, embedding_dim))
         self.decoder = Decoder(embedding_dim=embedding_dim, num_heads=num_heads, ff_dim=ff_dim, num_layers=num_layers, dropout=dropout, max_seq_len=max_seq_len, apply_mask=apply_mask, input_dim=input_dim, output_dim=output_dim)
         self.vocab_projection = nn.Linear(embedding_dim, self.embeddings.token_embedding.weight.shape[0], bias=False)
         with torch.no_grad():
@@ -133,6 +139,7 @@ class Transformer(nn.Module):
         image_features = F.normalize(image_features, p=2, dim=-1)
         image_features = image_features.unsqueeze(1)
         caption_features = self.embeddings(caption_ids)
+        caption_features = caption_features + self.pos_embedding[:, :caption_features.size(1), :]
         input_sequence = torch.cat([image_features, caption_features], dim=1)
         logits, attention_weights = self.decoder(input_sequence)
         logits = self.vocab_projection(logits)

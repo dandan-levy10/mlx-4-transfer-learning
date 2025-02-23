@@ -37,7 +37,7 @@ from tqdm import tqdm
 class FlickrDataset(torch.utils.data.Dataset):
     def __init__(self):
         super().__init__()
-        self.data = load_dataset("nlphuji/flickr30k", cache_dir="./data", split="test")
+        self.data = load_dataset("nlphuji/flickr30k", cache_dir="./data", split="test") # TODO: Remove
         self.processor = transformers.CLIPProcessor.from_pretrained('openai/clip-vit-base-patch32')
         self.tokenizer = self.processor.tokenizer
         self.vocab_size = self.tokenizer.vocab_size
@@ -61,7 +61,7 @@ class FlickrDataset(torch.utils.data.Dataset):
             self.token_counter.update(tokens)
 
     def __len__(self):
-        return len(self.data)
+        return len(self.data)  # Hard limit to 5 samples TODO: Remove
 
     def __getitem__(self, idx):
         item = self.data[idx]
@@ -83,3 +83,9 @@ class FlickrDataset(torch.utils.data.Dataset):
         caption_ids = encoding["input_ids"].squeeze(0)
 
         return image, caption_ids
+
+if __name__ == "__main__":
+    dataset = FlickrDataset()
+    sample = dataset[0]
+    print("Token IDs:", sample[1])
+    print("Decoded:", dataset.tokenizer.decode(sample[1]))

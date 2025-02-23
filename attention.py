@@ -22,7 +22,8 @@ class Attention(nn.Module):
         nn.init.xavier_uniform_(self.linear.weight)
         self.layer_norm = nn.LayerNorm(embedding_dim)
         self.dropout = nn.Dropout(dropout)
-        
+        self.image_bias = nn.Parameter(torch.tensor(1.0)) # Adding a bias for the image token
+    
     def forward(self, x: torch.Tensor) -> tuple:
         batch_size = x.shape[0]
         sequence_length = x.shape[1]
@@ -40,6 +41,7 @@ class Attention(nn.Module):
         V = torch.permute(V, (0, 2, 1, 3))
 
         A = (Q @ K.transpose(-2, -1)) / math.sqrt(self.head_dim)
+        A[:, :, :, 0] += self.image_bias  # Boost attention to image token
 
         # Apply mask if apply_mask is True
         if self.apply_mask:
